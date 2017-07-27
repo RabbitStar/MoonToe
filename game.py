@@ -10,8 +10,8 @@ PLAYER_X = 1
 PLAYER_O = -1
 DRAW = 2
 
-BOARD_SIZE = 7
-LINE = 4
+BOARD_SIZE = 10
+LINE = 5
 
 NAMES = {0: ' ', 1: 'X', -1: 'O'}
 
@@ -62,7 +62,7 @@ def gameover(state):
             ct[state[i][j]]+=1
             if state[i][j] != 0 and ct[state[i][j]] == LINE:
                 return state[i][j]
-            ct[state[i][j-LINE+1]]-=1
+            ct[state[i-LINE+1][j]]-=1
 
     # Diagonal winning
     for i in range(BOARD_SIZE):
@@ -117,9 +117,9 @@ class Agent(object):
     def lookup(self, state):
         c = self.possible(state)
         if self.player == 1:
-            key = (c[(1,0,3)],c[(2,0,2)],c[(3,0,1)],c[(0,1,3)],c[(0,2,2)],c[(0,3,1)])
+            key = (c[(1,0,4)],c[(2,0,3)],c[(3,0,2)],c[(4,0,1)],c[(0,1,4)],c[(0,2,3)],c[(0,3,2)],c[(0,4,1)])
         else:
-            key = (c[(0,1,3)],c[(0,2,2)],c[(0,3,1)], c[(1,0,3)],c[(2,0,2)],c[(3,0,1)])
+            key = (c[(0,1,4)],c[(0,2,3)],c[(0,3,2)],c[(0,4,1)], c[(1,0,4)],c[(2,0,3)],c[(3,0,2)],c[(4,0,1)])
         if not key in self.values:
             self.add(state, key)
         return self.values[key]
@@ -132,6 +132,29 @@ class Agent(object):
         self.backup(self.winnerval(winner))
         self.prevstate = None
         self.prevvalue = 0
+
+    def state_formula(self, state):
+        c = self.possible(state)
+        if self.player == 1:
+            key = (c[(1,0,4)],c[(2,0,3)],c[(3,0,2)],c[(4,0,1)],c[(5,0,0)],c[(0,1,4)],c[(0,2,3)],c[(0,3,2)],c[(0,4,1)],c[(0,5,0)])
+        else:
+            key = (c[(0,1,4)],c[(0,2,3)],c[(0,3,2)],c[(0,4,1)],c[(0,5,0)], c[(1,0,4)],c[(2,0,3)],c[(3,0,2)],c[(4,0,1)],c[(5,0,0)])
+        return math.log(key[0]+1)+math.sqrt(key[1])+key[2]+(2*key[3])**2+((5*key[4])**3)-(math.log(key[5]+1)+math.sqrt(key[6])+3*key[7]+(5*key[8])**2)
+
+    def random_greedy(self,state):
+        maxval = -999999999
+        maxpos = None
+        for i in range(BOARD_SIZE):
+            for j in range(BOARD_SIZE):
+                if state[i][j] == 0:
+                    state[i][j] = self.player
+                    val = self.state_formula(state)
+                    state[i][j] = EMPTY
+                    if val > maxval:
+                        maxval = val
+                        maxpos = (i, j)
+        return maxpos
+
 
     def greedy(self,state):
         maxval = -999999999
@@ -151,17 +174,22 @@ class Agent(object):
     def action(self,state,i):
         r = random.random()
         # Exploratory move
-        if r < self.epsilon:
-            move = random.choice(list(self.available_moves(state)))
+        if r < math.log10(i)/10:
+            '''
+            if bool(random.getrandbits(1)):
+                move = random.choice(list(self.available_moves(state)))
+            else:
+            '''
+            move = self.random_greedy(state)
         # Exploitation
         else:
             move = self.greedy(state)
         state[move[0]][move[1]] = self.player
         c = self.possible(state)
         if self.player == 1:
-            self.prevstate = (c[(1,0,3)],c[(2,0,2)],c[(3,0,1)],c[(0,1,3)],c[(0,2,2)],c[(0,3,1)])
+            key = (c[(1,0,4)],c[(2,0,3)],c[(3,0,2)],c[(4,0,1)],c[(0,1,4)],c[(0,2,3)],c[(0,3,2)],c[(0,4,1)])
         else:
-            self.prevstate = (c[(0,1,3)],c[(0,2,2)],c[(0,3,1)], c[(1,0,3)],c[(2,0,2)],c[(3,0,1)])
+            key = (c[(0,1,4)],c[(0,2,3)],c[(0,3,2)],c[(0,4,1)], c[(1,0,4)],c[(2,0,3)],c[(3,0,2)],c[(4,0,1)])
         self.prevvalue = self.lookup(state)
         state[move[0]][move[1]] = EMPTY
         return move
@@ -184,7 +212,7 @@ class Agent(object):
             for i in range(LINE - 1, BOARD_SIZE):
                 ct[state[i][j]] += 1
                 line[(ct[1],ct[-1],ct[0])] += 1
-                ct[state[i][j - LINE + 1]] -= 1
+                ct[state[i - LINE + 1][j]] -= 1
 
         for i in range(BOARD_SIZE - LINE + 1):
             ct = {0: 0, 1: 0, -1: 0}
@@ -270,24 +298,20 @@ class Human(object):
 if __name__ == '__main__':
     a1 = Agent(1, lossval=-1)
     a2 = Agent(-1, lossval=-1)
-    with open('gameX.pickle', 'rb') as handle:
-        c = pickle.load(handle)
-    a1.values = c
-    with open('gameO.pickle', 'rb') as handle:
-        c = pickle.load(handle)
-    a2.values = c
-    for i in range(1,50000):
-        if i%1000==0:
+    for i in range(1,50001):
+        if i%100==0:
             print i
+        if i%10000 == 0:
+            with open('gameX.pickle', 'wb') as handle:
+                pickle.dump(a1.values, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            with open('gameO.pickle', 'wb') as handle:
+                pickle.dump(a2.values, handle, protocol=pickle.HIGHEST_PROTOCOL)
         winner = play(a1, a2, i)
         a1.episode_over(winner)
         a2.episode_over(winner)
-    with open('gameX.pickle', 'wb') as handle:
-        pickle.dump(a1.values, handle, protocol=pickle.HIGHEST_PROTOCOL)
-    with open('gameO.pickle', 'wb') as handle:
-        pickle.dump(a2.values, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
     while True:
         a2 = Human(-1)
-        winner = play(a1, a2, i)
+        winner = play(a1, a2, 1)
         a1.episode_over(winner)
         a2.episode_over(winner)
